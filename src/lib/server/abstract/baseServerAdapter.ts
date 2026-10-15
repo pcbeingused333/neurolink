@@ -16,6 +16,7 @@ import {
 } from "../../observability/index.js";
 import { withTimeout } from "../../utils/errorHandling.js";
 import { logger } from "../../utils/logger.js";
+import { markContextCarried } from "../utils/carriedContextMark.js";
 import { tryImport } from "../../utils/tryImport.js";
 import {
   DrainTimeoutError,
@@ -32,6 +33,7 @@ import type {
   RouteDefinition,
   ServerAdapterConfig,
   ServerAdapterEvents,
+  ServerCarriedContext,
   ServerContext,
   ServerLifecycleState,
   ServerStatus,
@@ -621,6 +623,53 @@ export abstract class BaseServerAdapter extends EventEmitter {
         description: "Server metrics endpoint",
         tags: ["system"],
       });
+    }
+  }
+
+  /**
+   * What middleware has set on its context that later middleware and the route
+   * handler must see. Each step gets a freshly built context, so unless this is
+   * parked in the framework's per-request storage an authenticated `ctx.user`
+   * set by middleware is gone before the handler runs.
+   */
+  protected captureCarriedContext(ctx: ServerContext): ServerCarriedContext {
+    return {
+      user: ctx.user,
+      session: ctx.session,
+      metadata: ctx.metadata,
+      abortSignal: ctx.abortSignal,
+      abortController: ctx.abortController,
+    };
+  }
+
+  /**
+   * Put what `captureCarriedContext` saved onto a freshly built context, and
+   * mark the context as one that received the carry. The agent routes read the
+   * mark: a request that never used to reach its handler with `ctx.user` must
+   * not start being identified by it unless the server opts in.
+   */
+  protected restoreCarriedContext(
+    ctx: ServerContext,
+    carried: ServerCarriedContext | undefined,
+  ): void {
+    markContextCarried(ctx);
+    if (!carried) {
+      return;
+    }
+    if (carried.user) {
+      ctx.user = carried.user;
+    }
+    if (carried.session) {
+      ctx.session = carried.session;
+    }
+    if (carried.metadata) {
+      ctx.metadata = { ...ctx.metadata, ...carried.metadata };
+    }
+    if (carried.abortSignal) {
+      ctx.abortSignal = carried.abortSignal;
+    }
+    if (carried.abortController) {
+      ctx.abortController = carried.abortController;
     }
   }
 

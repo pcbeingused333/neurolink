@@ -52,7 +52,10 @@ export function createAllRoutes(
   options?: CreateRoutesOptions,
 ): RouteGroup[] {
   const routes: RouteGroup[] = [
-    createAgentRoutes(basePath, options?.agent),
+    createAgentRoutes(basePath, {
+      ...options?.agent,
+      perUserAuth: options?.perUserAuth,
+    }),
     createToolRoutes(basePath),
     createMCPRoutes(basePath),
     createMemoryRoutes(basePath),

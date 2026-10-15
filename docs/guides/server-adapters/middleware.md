@@ -619,7 +619,10 @@ server.registerMiddleware(
     maxRequests: 1000,
     windowMs: 60 * 60 * 1000, // 1 hour
     keyGenerator: (ctx) =>
-      ctx.user?.id || ctx.headers["x-forwarded-for"] || "unknown",
+      // A shared identity (one API key for many callers) is not a person
+      ctx.user && !ctx.user.shared
+        ? ctx.user.id
+        : ctx.headers["x-forwarded-for"] || "unknown",
   }),
 );
 ```
@@ -720,9 +723,16 @@ type AuthResult = {
   id: string;
   email?: string;
   roles?: string[];
+  /** true when this identity stands for every holder of one credential (a shared API key), not one person. */
+  shared?: boolean;
   metadata?: Record<string, unknown>;
 };
 ```
+
+The authenticated user is set on `ctx.user` and reaches later middleware and the
+route handler on every adapter. Whether the agent routes treat it as the caller's
+identity is a separate choice: see `perUserAuth` in the
+[security guide](./security.md#who-the-agent-routes-treat-as-the-user-peruserauth).
 
 ### Usage
 
